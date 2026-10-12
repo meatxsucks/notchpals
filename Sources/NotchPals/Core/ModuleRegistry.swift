@@ -7,6 +7,7 @@ enum ModuleRegistry {
             ClipboardModule(),
             ShelfModule(),
             ShortcutsModule(),
+            ClaudeModule(),
         ]
     }
 }

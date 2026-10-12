@@ -25,3 +25,11 @@ de herramientas. Vive en la barra de menú, sin ícono en el Dock; el panel se e
 
 ## Limitación
 Desarrollado desde Linux: no se puede compilar ni probar aquí. Hay que abrir `Package.swift` en Xcode.
+
+## Módulo Claude
+- **Chat:** Messages API por HTTP (`claude-opus-5-5`, effort `low`). La API key vive en el llavero de macOS.
+- **Aprobaciones:** servidor local en `127.0.0.1:47600` (solo loopback, con token en `~/.notchpals/token`).
+  Un hook `PreToolUse` de Claude Code ejecuta `scripts/claude-approve-hook.sh`, que consulta al notch y devuelve
+  `allow`/`deny`. Sin respuesta en 60 s devuelve `ask` y Claude Code pregunta en la terminal.
+- Configuración en `~/.claude/settings.json`:
+  `{"hooks":{"PreToolUse":[{"matcher":"Bash|Edit|Write","hooks":[{"type":"command","command":"/ruta/a/notchpals/scripts/claude-approve-hook.sh","timeout":75}]}]}}`

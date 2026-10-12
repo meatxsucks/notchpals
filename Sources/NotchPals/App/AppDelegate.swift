@@ -7,5 +7,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory) // sin ícono en el Dock
         panelController = NotchPanelController(viewModel: NotchViewModel(modules: ModuleRegistry.all))
         panelController?.show()
+        ApprovalServer.shared.start() // aprobaciones de Claude Code desde el notch
     }
 }
