@@ -66,12 +66,16 @@ final class ApprovalServer: ObservableObject {
     }
 
     private func handle(_ http: HTTPRequestParser.Request, on connection: NWConnection) {
-        guard http.method == "POST", http.path == "/approve",
-              http.headers["x-notchpals-token"] == token else {
+        guard http.method == "POST", http.headers["x-notchpals-token"] == token else {
             send(connection, status: 403, body: Data("{}".utf8))
             return
         }
-        guard let request = ApprovalProtocol.parse(http.body) else {
+        if http.path == "/event" { // eventos que no bloquean a Claude Code
+            if let event = SessionEvent.parse(http.body) { SessionTracker.shared.apply(event) }
+            send(connection, status: 204, body: Data())
+            return
+        }
+        guard http.path == "/approve", let request = ApprovalProtocol.parse(http.body) else {
             send(connection, status: 400, body: Data("{}".utf8))
             return
         }

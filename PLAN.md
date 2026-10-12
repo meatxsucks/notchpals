@@ -33,3 +33,10 @@ Desarrollado desde Linux: no se puede compilar ni probar aquí. Hay que abrir `P
   Permitir / Siempre / Rechazar. Sin respuesta en 100 s (o si la app está cerrada) no imprime nada y Claude Code pregunta en la terminal.
 - Configuración en `~/.claude/settings.json`:
   `{"hooks":{"PermissionRequest":[{"hooks":[{"type":"command","command":"/ruta/a/notchpals/scripts/claude-approve-hook.sh","timeout":120}]}]}}`
+
+### Hook e instalación (módulo Claude)
+- La pestaña **Hook** instala los hooks desde la app: genera `~/.notchpals/hook.sh`, hace una copia con fecha de
+  `~/.claude/settings.json`, muestra el diff y solo escribe tras el clic en «Confirmar». También los quita.
+  Eventos: `PermissionRequest` (bloqueante, 120 s) y `PreToolUse`, `PostToolUse`, `SessionStart`, `Stop`, `SessionEnd` (1 s, no bloquean).
+- La pestaña **Sesiones** muestra cada sesión de Claude Code: qué lee, edita o ejecuta, y los cambios aproximados +N −M por archivo.
+- Ya no hace falta pegar JSON a mano: `scripts/claude-approve-hook.sh` queda solo como referencia.
