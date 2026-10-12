@@ -28,8 +28,6 @@ struct NotchRootView: View {
                 .transition(.opacity)
             }
         }
-        .onHover { hovering in
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { viewModel.isExpanded = hovering }
-        }
+        .onHover { viewModel.setHovering($0) }
     }
 }
