@@ -49,7 +49,7 @@ struct ClaudeClient {
             "max_tokens": 16_000,
             "output_config": ["effort": "low"], // chat rápido en el notch
             "fallbacks": "default",
-            "system": "Eres un asistente integrado en el notch de un Mac. Responde breve y directo.",
+            "system": ChatPrompt.system,
             "messages": messages.map { ["role": $0.role.rawValue, "content": content(for: $0)] as [String: Any] },
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)

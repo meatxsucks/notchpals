@@ -26,4 +26,7 @@ El **chat** funciona con tres motores, que eliges arriba del chat:
   Escribe la URL, pulsa *Conectar* y elige el modelo. Usan la API compatible con OpenAI, la respuesta llega en streaming
   y los bloques de razonamiento (`<think>`) se ocultan. Aceptan texto e imágenes (con un modelo de visión); los PDF no.
 
+El asistente responde por defecto en 1 a 3 frases, en texto plano, para que quepa en el notch. Puedes cambiar ese
+prompt con `defaults write com.notchpals.app notchpals.systemPrompt "…"` (ver `ChatPrompt.swift`).
+
 Más detalles de diseño en [PLAN.md](PLAN.md).

@@ -28,7 +28,6 @@ enum LocalServer: String, CaseIterable {
 
 /// Utilidades puras para hablar con un servidor local (Ollama, LM Studio…).
 enum LocalLLM {
-    static let systemPrompt = "Eres un asistente integrado en el notch de un Mac. Responde breve y directo."
     /// Modelos que no sirven para chat.
     static let excludedModelHints = ["embed", "bge-", "all-minilm", "clip", "rerank"]
 
@@ -86,7 +85,7 @@ enum LocalLLM {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer ollama", forHTTPHeaderField: "Authorization")
-        var encoded: [[String: Any]] = [["role": "system", "content": systemPrompt]]
+        var encoded: [[String: Any]] = [["role": "system", "content": ChatPrompt.system]]
         for message in messages { encoded.append(try encode(message)) }
         let body: [String: Any] = ["model": model, "messages": encoded, "stream": true, "max_tokens": 8192]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
