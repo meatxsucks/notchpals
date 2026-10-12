@@ -25,5 +25,6 @@ struct ClaudeView: View {
         .frame(maxWidth: 600, maxHeight: 150)
         .foregroundStyle(.white)
         .onChange(of: approvals.pending.count) { count in if count > 0 { tab = 2 } }
+        .onReceive(NotificationCenter.default.publisher(for: NotchDrop.didDrop)) { _ in tab = 0 }
     }
 }
