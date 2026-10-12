@@ -36,6 +36,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <string>NotchPals muestra tus próximos eventos en el notch.</string>
     <key>NSCalendarsUsageDescription</key>
     <string>NotchPals muestra tus próximos eventos en el notch.</string>
+    <key>NSAppTransportSecurity</key>
+    <dict><key>NSAllowsLocalNetworking</key><true/></dict>
     <key>NSAppleEventsUsageDescription</key>
     <string>NotchPals controla Spotify y Apple Music para mostrar la pista y los controles.</string>
 </dict>
