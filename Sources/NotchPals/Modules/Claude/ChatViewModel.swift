@@ -1,9 +1,20 @@
 import SwiftUI
 
 enum ChatProvider: String, CaseIterable, Identifiable {
-    case claude, ollama
+    case claude, ollama, lmstudio
+
     var id: String { rawValue }
-    var label: String { self == .claude ? "Claude" : "Ollama" }
+    var label: String {
+        switch self {
+        case .claude: return "Claude"
+        case .ollama: return LocalServer.ollama.label
+        case .lmstudio: return LocalServer.lmstudio.label
+        }
+    }
+    var server: LocalServer? { LocalServer(rawValue: rawValue) }
+    var isLocal: Bool { server != nil }
+    var urlKey: String { "notchpals.\(rawValue).url" }
+    var modelKey: String { "notchpals.\(rawValue).model" }
 }
 
 @MainActor
@@ -23,25 +34,25 @@ final class ChatViewModel: ObservableObject {
         didSet {
             UserDefaults.standard.set(provider.rawValue, forKey: Self.providerKey)
             error = nil
-            if provider == .ollama { refreshModels() }
+            loadLocalSettings()
         }
     }
-    @Published var ollamaModels: [String] = []
-    @Published var ollamaModel: String {
-        didSet { UserDefaults.standard.set(ollamaModel, forKey: OllamaSettings.modelKey) }
+    /// URL que se está editando; solo se guarda al conectar con éxito.
+    @Published var localURL = ""
+    @Published var localModels: [String] = []
+    @Published var localModel = "" {
+        didSet { if provider.isLocal { UserDefaults.standard.set(localModel, forKey: provider.modelKey) } }
     }
-    @Published var ollamaURL: String {
-        didSet { UserDefaults.standard.set(ollamaURL, forKey: OllamaSettings.urlKey) }
-    }
+    @Published var isConnecting = false
 
     private var sendTask: Task<Void, Never>?
 
     init() {
-        let defaults = UserDefaults.standard
-        provider = ChatProvider(rawValue: defaults.string(forKey: Self.providerKey) ?? "") ?? .claude
-        ollamaModel = defaults.string(forKey: OllamaSettings.modelKey) ?? ""
-        ollamaURL = defaults.string(forKey: OllamaSettings.urlKey) ?? OllamaSettings.defaultURL
+        provider = ChatProvider(rawValue: UserDefaults.standard.string(forKey: Self.providerKey) ?? "") ?? .claude
+        loadLocalSettings()
     }
+
+    // MARK: Claude
 
     func saveKey(_ key: String) {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -53,6 +64,55 @@ final class ChatViewModel: ObservableObject {
         KeychainStore.delete()
         hasKey = false
     }
+
+    // MARK: Servidores locales
+
+    /// URL guardada del proveedor actual, ya normalizada; vacía si no está conectado.
+    private var savedURL: String { UserDefaults.standard.string(forKey: provider.urlKey) ?? "" }
+
+    private func loadLocalSettings() {
+        guard let server = provider.server else { return }
+        localURL = savedURL.isEmpty ? server.defaultURL : savedURL
+        localModel = UserDefaults.standard.string(forKey: provider.modelKey) ?? ""
+        localModels = []
+        if !savedURL.isEmpty { connect() }
+    }
+
+    /// Prueba la URL, lista los modelos y, si responde, la guarda.
+    func connect() {
+        guard provider.isLocal, !isConnecting else { return }
+        let target = provider
+        let url = LocalLLM.normaliseURL(localURL)
+        isConnecting = true
+        error = nil
+        Task {
+            defer { isConnecting = false }
+            do {
+                let models = try await LocalLLMClient(baseURL: url, model: "").listModels()
+                guard provider == target else { return }
+                localURL = url
+                UserDefaults.standard.set(url, forKey: target.urlKey)
+                localModels = models
+                if !models.contains(localModel) { localModel = models.first ?? "" }
+                if models.isEmpty { error = "El servidor no tiene modelos de chat instalados." }
+            } catch {
+                guard provider == target else { return }
+                localModels = []
+                self.error = error.localizedDescription
+            }
+        }
+    }
+
+    /// Olvida la conexión del proveedor actual.
+    func disconnect() {
+        guard let server = provider.server else { return }
+        UserDefaults.standard.removeObject(forKey: provider.urlKey)
+        localModels = []
+        localURL = server.defaultURL
+        error = nil
+    }
+
+    // MARK: Adjuntos
 
     func attach(url: URL) {
         error = nil
@@ -67,19 +127,7 @@ final class ChatViewModel: ObservableObject {
 
     func removeAttachment() { attachment = nil }
 
-    func refreshModels() {
-        Task {
-            do {
-                let models = try await OllamaClient(baseURL: OllamaSettings.baseURL, model: "").listModels()
-                ollamaModels = models
-                if !models.contains(ollamaModel) { ollamaModel = models.first ?? "" }
-                if models.isEmpty { error = "Ollama no tiene modelos instalados (ollama pull <modelo>)." }
-            } catch {
-                ollamaModels = []
-                self.error = error.localizedDescription
-            }
-        }
-    }
+    // MARK: Envío
 
     func send() {
         let typed = input.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -90,8 +138,8 @@ final class ChatViewModel: ObservableObject {
             error = ClaudeError.missingKey.errorDescription
             return
         }
-        if provider == .ollama, ollamaModel.isEmpty {
-            error = OllamaError.noModel.errorDescription
+        if provider.isLocal, localModel.isEmpty {
+            error = LocalLLMError.noModel.errorDescription
             return
         }
         input = ""
@@ -102,23 +150,20 @@ final class ChatViewModel: ObservableObject {
         let history = messages
         sendTask = Task {
             do {
-                switch provider {
-                case .claude:
+                if provider == .claude {
                     let reply = try await ClaudeClient(apiKey: KeychainStore.load() ?? "").send(history)
                     messages.append(ChatMessage(role: .assistant, text: reply))
-                case .ollama:
+                } else {
                     messages.append(ChatMessage(role: .assistant, text: ""))
-                    let client = OllamaClient(baseURL: OllamaSettings.baseURL, model: ollamaModel)
-                    for try await piece in client.streamReply(history) {
-                        messages[messages.count - 1].text += piece
+                    let client = LocalLLMClient(baseURL: LocalLLM.normaliseURL(localURL), model: localModel)
+                    for try await visible in client.streamReply(history) {
+                        messages[messages.count - 1].text = visible
                     }
                     if messages.last?.text.isEmpty == true { messages.removeLast() }
                 }
             } catch {
-                if provider == .ollama, messages.last?.role == .assistant, messages.last?.text.isEmpty == true {
-                    messages.removeLast()
-                }
-                self.error = error.localizedDescription
+                if messages.last?.role == .assistant, messages.last?.text.isEmpty == true { messages.removeLast() }
+                if !(error is CancellationError) { self.error = error.localizedDescription }
             }
             isSending = false
         }

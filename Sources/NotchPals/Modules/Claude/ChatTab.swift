@@ -60,27 +60,30 @@ struct ChatTab: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(width: 140)
-            if chat.provider == .ollama { ollamaControls }
+            .frame(width: 230)
+            if chat.provider.isLocal { localControls }
             Spacer()
             Button { chat.clear() } label: { Image(systemName: "trash") }.buttonStyle(.plain)
         }
     }
 
-    @ViewBuilder private var ollamaControls: some View {
-        if chat.ollamaModels.isEmpty {
-            TextField("URL de Ollama", text: $chat.ollamaURL)
+    @ViewBuilder private var localControls: some View {
+        if chat.localModels.isEmpty {
+            TextField("URL del servidor", text: $chat.localURL)
                 .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: 200)
-                .onSubmit { chat.refreshModels() }
-            Button("Conectar") { chat.refreshModels() }
+                .frame(maxWidth: 190)
+                .onSubmit { chat.connect() }
+            Button(chat.isConnecting ? "Conectando…" : "Conectar") { chat.connect() }
+                .disabled(chat.isConnecting)
         } else {
-            Picker("", selection: $chat.ollamaModel) {
-                ForEach(chat.ollamaModels, id: \.self) { Text($0).tag($0) }
+            Picker("", selection: $chat.localModel) {
+                ForEach(chat.localModels, id: \.self) { Text($0).tag($0) }
             }
             .labelsHidden()
-            .frame(maxWidth: 200)
-            Button { chat.refreshModels() } label: { Image(systemName: "arrow.clockwise") }.buttonStyle(.plain)
+            .frame(maxWidth: 190)
+            Button { chat.disconnect() } label: { Image(systemName: "xmark.circle") }
+                .buttonStyle(.plain)
+                .help("Desconectar")
         }
     }
 }
