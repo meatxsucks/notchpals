@@ -1,0 +1,37 @@
+import SwiftUI
+
+struct ChatTab: View {
+    @ObservedObject private var chat = ChatViewModel.shared
+    @State private var keyDraft = ""
+
+    @ViewBuilder var body: some View {
+        if !chat.hasKey {
+            HStack {
+                SecureField("API key de Anthropic (sk-ant-…)", text: $keyDraft)
+                    .textFieldStyle(.roundedBorder)
+                Button("Guardar") { chat.saveKey(keyDraft); keyDraft = "" }
+            }
+            Text("Se guarda en el llavero de macOS.").font(.caption).foregroundStyle(.gray)
+        } else {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(chat.messages) { message in
+                        Text(message.text)
+                            .font(.callout)
+                            .foregroundStyle(message.role == .user ? .gray : .white)
+                            .textSelection(.enabled)
+                    }
+                    if chat.isSending { ProgressView().controlSize(.small) }
+                    if let error = chat.error { Text(error).font(.caption).foregroundStyle(.red) }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            HStack {
+                TextField("Pregúntale a Claude…", text: $chat.input)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { chat.send() }
+                Button { chat.clear() } label: { Image(systemName: "trash") }.buttonStyle(.plain)
+            }
+        }
+    }
+}
