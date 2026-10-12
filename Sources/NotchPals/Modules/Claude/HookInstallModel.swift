@@ -70,9 +70,7 @@ final class HookInstallModel: ObservableObject {
     private func writeScript() throws {
         try fileManager.createDirectory(at: scriptURL.deletingLastPathComponent(), withIntermediateDirectories: true,
                                         attributes: [.posixPermissions: 0o700])
-        let source = HookInstaller.scriptSource
-            .components(separatedBy: "\n").map { $0.hasPrefix("    ") ? String($0.dropFirst(4)) : $0 }
-            .joined(separator: "\n") + "\n"
+        let source = HookInstaller.scriptSource + "\n"
         try source.write(to: scriptURL, atomically: true, encoding: .utf8)
         try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
     }
