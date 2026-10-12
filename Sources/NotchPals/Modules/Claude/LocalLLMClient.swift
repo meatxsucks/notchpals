@@ -1,3 +1,4 @@
+// Diseño basado en LocalChat de Coucou (https://github.com/Louis-CFM/coucou), licencia MIT. Ver THIRD_PARTY_NOTICES.md.
 import Foundation
 
 enum LocalLLMError: LocalizedError, Equatable {
