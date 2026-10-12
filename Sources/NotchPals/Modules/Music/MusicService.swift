@@ -5,7 +5,12 @@ import SwiftUI
 /// Servicio observable: consulta los reproductores mientras la vista está visible.
 @MainActor
 final class MusicService: ObservableObject {
+    /// Instancia compartida (la vista de música y otras partes del app, p. ej. la mascota).
+    static let shared = MusicService()
+
     @Published private(set) var snapshot: MusicSnapshot?
+    /// Momento en que se leyó `snapshot` (base para interpolar la posición).
+    @Published private(set) var snapshotDate = Date()
     @Published private(set) var artwork: NSImage?
     @Published private(set) var message: String?
 
@@ -14,6 +19,7 @@ final class MusicService: ObservableObject {
     private var pollTask: Task<Void, Never>?
     private var artworkTask: Task<Void, Never>?
     private var artworkTrackID: String?
+    private var pollUsers = 0
 
     init(backends: [MusicBackend]? = nil, pollInterval: TimeInterval = 1.0) {
         self.backends = backends ?? MusicApp.allCases.map { ScriptedMusicBackend(app: $0) }
@@ -46,6 +52,34 @@ final class MusicService: ObservableObject {
 
     var isPolling: Bool { pollTask != nil }
 
+    /// Pide sondeo con cuenta de referencias: varias partes pueden necesitarlo a la vez.
+    func acquire() {
+        pollUsers += 1
+        start()
+    }
+
+    func release() {
+        pollUsers = max(0, pollUsers - 1)
+        if pollUsers == 0 { stop() }
+    }
+
+    /// `true` si el reproductor elegido está sonando (último sondeo).
+    /// Solo se actualiza mientras haya sondeo activo (`acquire()`/`start()`).
+    var isPlaying: Bool { snapshot?.state == .playing }
+
+    var capabilities: MusicCapabilities {
+        snapshot.map { MusicCapabilities(app: $0.app) } ?? MusicCapabilities()
+    }
+
+    /// Posición estimada en `date`, interpolada desde el último sondeo.
+    func position(at date: Date) -> TimeInterval {
+        guard let snap = snapshot else { return 0 }
+        return MusicProgress.position(base: snap.position,
+                                      duration: snap.duration,
+                                      isPlaying: snap.state == .playing,
+                                      elapsed: date.timeIntervalSince(snapshotDate))
+    }
+
     // MARK: - Estado
 
     func refresh() {
@@ -74,9 +108,28 @@ final class MusicService: ObservableObject {
             newMessage = "Abre Spotify o Apple Music para ver la reproducción."
         }
 
-        if snapshot != chosen { snapshot = chosen }
+        if snapshot != chosen {
+            snapshot = chosen
+            snapshotDate = Date()
+        } else if chosen?.state == .playing {
+            snapshotDate = Date()
+        }
         if message != newMessage { message = newMessage }
         updateArtwork(for: chosen)
+    }
+
+    func seek(to seconds: TimeInterval) { perform(.seek(seconds)) }
+
+    func setVolume(_ volume: Int) { perform(.setVolume(volume)) }
+
+    func toggleShuffle() {
+        perform(.setShuffle(!(snapshot?.shuffle ?? false)))
+    }
+
+    func cycleRepeat() {
+        let modes = capabilities.repeatModes
+        let current = snapshot?.repeatMode ?? .off
+        perform(.setRepeat(current.next(in: modes)))
     }
 
     func perform(_ command: MusicCommand) {

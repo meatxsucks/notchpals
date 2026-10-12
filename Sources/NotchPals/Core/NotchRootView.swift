@@ -41,6 +41,10 @@ struct NotchRootView: View {
             // Abre el notch (en el Chat) mientras arrastras un archivo encima.
             viewModel.setNeedsAttention(targeted, focusing: targeted ? "claude" : nil)
         }
+        // Dot solo se ve con el notch abierto: el sondeo de música corre solo entonces.
+        .onChange(of: viewModel.isExpanded) { expanded in
+            if expanded { MusicService.shared.acquire() } else { MusicService.shared.release() }
+        }
         .onReceive(NotificationCenter.default.publisher(for: NotchDrop.didDrop)) { _ in
             viewModel.selectedID = "claude"
         }

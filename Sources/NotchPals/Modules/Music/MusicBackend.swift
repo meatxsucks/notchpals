@@ -9,6 +9,12 @@ protocol MusicBackend: AnyObject {
     func fetchSnapshot() throws -> MusicSnapshot
     func artwork(for track: MusicTrack) async -> NSImage?
     func send(_ command: MusicCommand) throws
+    /// Controles soportados (por defecto según la app).
+    var capabilities: MusicCapabilities { get }
+}
+
+extension MusicBackend {
+    var capabilities: MusicCapabilities { MusicCapabilities(app: app) }
 }
 
 /// Ejecuta AppleScript. Abstracción para tests.
@@ -66,13 +72,27 @@ final class ScriptedMusicBackend: MusicBackend {
 
     func send(_ command: MusicCommand) throws {
         guard isRunning() else { throw MusicError.notRunning(app) }
+        _ = try runner.run(Self.commandScript(command, for: app), app: app)
+    }
+
+    /// Script de una orden (puro, testeable).
+    static func commandScript(_ command: MusicCommand, for app: MusicApp) -> String {
         let verb: String
         switch command {
         case .playPause: verb = "playpause"
         case .previous: verb = "previous track"
         case .next: verb = "next track"
+        case .seek(let t): verb = String(format: "set player position to %.2f", max(0, t))
+        case .setVolume(let v): verb = "set sound volume to \(min(100, max(0, v)))"
+        case .setShuffle(let on):
+            verb = "set \(app == .spotify ? "shuffling" : "shuffle enabled") to \(on ? "true" : "false")"
+        case .setRepeat(let mode):
+            switch app {
+            case .spotify: verb = "set repeating to \(mode == .off ? "false" : "true")"
+            case .appleMusic: verb = "set song repeat to \(mode.rawValue)"
+            }
         }
-        _ = try runner.run("tell application \"\(app.scriptName)\" to \(verb)", app: app)
+        return "tell application \"\(app.scriptName)\" to \(verb)"
     }
 
     func artwork(for track: MusicTrack) async -> NSImage? {
@@ -107,14 +127,42 @@ final class ScriptedMusicBackend: MusicBackend {
     // MARK: - Scripts
 
     static func fetchScript(for app: MusicApp) -> String {
-        let artworkField = app == .spotify ? " & d & (artwork url of t)" : ""
+        let isSpotify = app == .spotify
+        let artworkLine = isSpotify ? "set art to artwork url of t" : "set art to \"\""
+        let durationExpr = isSpotify ? "(duration of t) / 1000" : "duration of t"
+        let shuffleProp = isSpotify ? "shuffling" : "shuffle enabled"
+        let repeatProp = isSpotify ? "repeating" : "song repeat"
         return """
         tell application "\(app.scriptName)"
             set d to character id 31
             set st to player state as text
             if st is "stopped" then return st
             set t to current track
-            return st & d & (name of t) & d & (artist of t) & d & (album of t)\(artworkField)
+            set art to ""
+            try
+                \(artworkLine)
+            end try
+            set pos to ""
+            try
+                set pos to (player position) as text
+            end try
+            set dur to ""
+            try
+                set dur to (\(durationExpr)) as text
+            end try
+            set vol to ""
+            try
+                set vol to (sound volume) as text
+            end try
+            set shuf to ""
+            try
+                set shuf to (\(shuffleProp)) as text
+            end try
+            set rep to ""
+            try
+                set rep to (\(repeatProp)) as text
+            end try
+            return st & d & (name of t) & d & (artist of t) & d & (album of t) & d & art & d & pos & d & dur & d & vol & d & shuf & d & rep
         end tell
         """
     }

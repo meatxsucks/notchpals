@@ -93,4 +93,102 @@ final class MusicTests: XCTestCase {
         XCTAssertEqual(b.sent, [.next])
         XCTAssertEqual(service.snapshot?.track?.title, "a")
     }
+
+    // MARK: - Extendido
+
+    func testParseExtendedFields() {
+        let out = ["playing", "Song", "Artist", "Album", "", "12,5", "200", "70", "true", "one"]
+            .joined(separator: sep)
+        let s = MusicParser.parse(out, app: .appleMusic)
+        XCTAssertEqual(s?.position, 12.5)
+        XCTAssertEqual(s?.duration, 200)
+        XCTAssertEqual(s?.volume, 70)
+        XCTAssertEqual(s?.shuffle, true)
+        XCTAssertEqual(s?.repeatMode, .one)
+        XCTAssertNil(s?.track?.artworkURL)
+    }
+
+    func testParseExtendedMissingOrEmpty() {
+        let out = ["playing", "Song", "Artist", "Album", "", "", "", "", "", ""].joined(separator: sep)
+        let s = MusicParser.parse(out, app: .spotify)
+        XCTAssertEqual(s?.position, 0)
+        XCTAssertEqual(s?.duration, 0)
+        XCTAssertNil(s?.volume)
+        XCTAssertNil(s?.shuffle)
+        XCTAssertNil(s?.repeatMode)
+    }
+
+    func testParseSpotifyBooleanRepeatAndVolumeClamp() {
+        let out = ["paused", "S", "A", "B", "", "1", "2", "150", "false", "true"].joined(separator: sep)
+        let s = MusicParser.parse(out, app: .spotify)
+        XCTAssertEqual(s?.volume, 100)
+        XCTAssertEqual(s?.shuffle, false)
+        XCTAssertEqual(s?.repeatMode, .all)
+    }
+
+    func testInterpolatedPosition() {
+        XCTAssertEqual(MusicProgress.position(base: 10, duration: 100, isPlaying: true, elapsed: 2.5), 12.5)
+        XCTAssertEqual(MusicProgress.position(base: 10, duration: 100, isPlaying: false, elapsed: 5), 10)
+        XCTAssertEqual(MusicProgress.position(base: 99, duration: 100, isPlaying: true, elapsed: 5), 100)
+        XCTAssertEqual(MusicProgress.position(base: 10, duration: 0, isPlaying: true, elapsed: 5), 15)
+        XCTAssertEqual(MusicProgress.position(base: 10, duration: 100, isPlaying: true, elapsed: -3), 10)
+    }
+
+    func testFractionAndFormat() {
+        XCTAssertEqual(MusicProgress.fraction(position: 50, duration: 200), 0.25)
+        XCTAssertEqual(MusicProgress.fraction(position: 50, duration: 0), 0)
+        XCTAssertEqual(MusicProgress.fraction(position: 500, duration: 200), 1)
+        XCTAssertEqual(MusicProgress.format(65), "1:05")
+        XCTAssertEqual(MusicProgress.format(3725), "1:02:05")
+        XCTAssertEqual(MusicProgress.format(-4), "0:00")
+    }
+
+    func testRepeatCycle() {
+        XCTAssertEqual(RepeatMode.off.next(in: [.off, .one, .all]), .one)
+        XCTAssertEqual(RepeatMode.all.next(in: [.off, .one, .all]), .off)
+        XCTAssertEqual(RepeatMode.all.next(in: [.off, .all]), .off)
+        XCTAssertEqual(RepeatMode.one.next(in: [.off, .all]), .off)
+        XCTAssertFalse(MusicCapabilities(app: .spotify).repeatModes.contains(.one))
+    }
+
+    @MainActor
+    func testCommandScripts() {
+        XCTAssertEqual(ScriptedMusicBackend.commandScript(.seek(12.5), for: .spotify),
+                       "tell application \"Spotify\" to set player position to 12.50")
+        XCTAssertEqual(ScriptedMusicBackend.commandScript(.setVolume(120), for: .appleMusic),
+                       "tell application \"Music\" to set sound volume to 100")
+        XCTAssertEqual(ScriptedMusicBackend.commandScript(.setShuffle(true), for: .appleMusic),
+                       "tell application \"Music\" to set shuffle enabled to true")
+        XCTAssertEqual(ScriptedMusicBackend.commandScript(.setRepeat(.one), for: .appleMusic),
+                       "tell application \"Music\" to set song repeat to one")
+        XCTAssertEqual(ScriptedMusicBackend.commandScript(.setRepeat(.all), for: .spotify),
+                       "tell application \"Spotify\" to set repeating to true")
+    }
+
+    @MainActor
+    func testServiceIsPlaying() {
+        let t = MusicTrack(title: "a", artist: "b", album: "c", artworkURL: nil)
+        let b = MockBackend(app: .spotify, result: .success(MusicSnapshot(app: .spotify, state: .playing, track: t)))
+        let service = MusicService(backends: [b])
+        XCTAssertFalse(service.isPlaying)
+        service.refresh()
+        XCTAssertTrue(service.isPlaying)
+        b.result = .success(MusicSnapshot(app: .spotify, state: .paused, track: t))
+        service.refresh()
+        XCTAssertFalse(service.isPlaying)
+    }
+
+    @MainActor
+    func testServiceToggleShuffleAndRepeat() {
+        let t = MusicTrack(title: "a", artist: "b", album: "c", artworkURL: nil)
+        let snap = MusicSnapshot(app: .appleMusic, state: .playing, track: t,
+                                 shuffle: false, repeatMode: .off)
+        let b = MockBackend(app: .appleMusic, result: .success(snap))
+        let service = MusicService(backends: [b])
+        service.refresh()
+        service.toggleShuffle()
+        service.cycleRepeat()
+        service.seek(to: 30)
+        XCTAssertEqual(b.sent, [.setShuffle(true), .setRepeat(.one), .seek(30)])
+    }
 }

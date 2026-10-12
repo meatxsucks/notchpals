@@ -6,6 +6,6 @@ struct MusicModule: NotchModule {
     let systemImage = "music.note"
 
     @MainActor func makeView() -> AnyView {
-        AnyView(MusicView())
+        AnyView(MusicView(service: MusicService.shared))
     }
 }
