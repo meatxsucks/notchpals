@@ -35,9 +35,9 @@ final class MascotModel: ObservableObject {
             }
             .store(in: &cancellables)
 
-        MusicService.shared.$isPlaying
-            .sink { [weak self] playing in
-                self?.isMusicPlaying = playing
+        MusicService.shared.$snapshot
+            .sink { [weak self] snapshot in
+                self?.isMusicPlaying = snapshot?.state == .playing
                 self?.update()
             }
             .store(in: &cancellables)
