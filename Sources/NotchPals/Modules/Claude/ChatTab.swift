@@ -5,13 +5,15 @@ struct ChatTab: View {
     @State private var keyDraft = ""
 
     @ViewBuilder var body: some View {
-        if !chat.hasKey {
+        header
+        if chat.provider == .claude && !chat.hasKey {
             HStack {
                 SecureField("API key de Anthropic (sk-ant-…)", text: $keyDraft)
                     .textFieldStyle(.roundedBorder)
                 Button("Guardar") { chat.saveKey(keyDraft); keyDraft = "" }
             }
-            Text("Se guarda en el llavero de macOS.").font(.caption).foregroundStyle(.gray)
+            Text("Se guarda en el llavero de macOS. O usa Ollama, sin API key.")
+                .font(.caption).foregroundStyle(.gray)
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 4) {
@@ -41,11 +43,44 @@ struct ChatTab: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             HStack {
-                TextField("Pregúntale a Claude…", text: $chat.input)
+                TextField("Pregúntale a \(chat.provider.label)…", text: $chat.input)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { chat.send() }
-                Button { chat.clear() } label: { Image(systemName: "trash") }.buttonStyle(.plain)
+                if chat.isSending {
+                    Button { chat.stop() } label: { Image(systemName: "stop.circle") }.buttonStyle(.plain)
+                }
             }
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            Picker("", selection: $chat.provider) {
+                ForEach(ChatProvider.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 140)
+            if chat.provider == .ollama { ollamaControls }
+            Spacer()
+            Button { chat.clear() } label: { Image(systemName: "trash") }.buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder private var ollamaControls: some View {
+        if chat.ollamaModels.isEmpty {
+            TextField("URL de Ollama", text: $chat.ollamaURL)
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: 200)
+                .onSubmit { chat.refreshModels() }
+            Button("Conectar") { chat.refreshModels() }
+        } else {
+            Picker("", selection: $chat.ollamaModel) {
+                ForEach(chat.ollamaModels, id: \.self) { Text($0).tag($0) }
+            }
+            .labelsHidden()
+            .frame(maxWidth: 200)
+            Button { chat.refreshModels() } label: { Image(systemName: "arrow.clockwise") }.buttonStyle(.plain)
         }
     }
 }

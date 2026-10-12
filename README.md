@@ -20,6 +20,8 @@ Automatización para Spotify/Música) la primera vez que uses cada módulo.
 En la pestaña **Claude → Hook** pulsa *Instalar…*: muestra los cambios a `~/.claude/settings.json`, guarda una copia
 con fecha y solo escribe cuando confirmas. Después, las aprobaciones de permisos y las sesiones en vivo aparecen en el notch.
 
-El **chat** usa la API de Anthropic con tu propia API key, guardada en el llavero de macOS.
+El **chat** funciona con dos motores, que eliges arriba del chat:
+- **Claude**: API de Anthropic con tu propia API key, guardada en el llavero de macOS.
+- **Ollama**: tu servidor local (`ollama serve`, por defecto `http://127.0.0.1:11434`). Sin API key; elige el modelo en el menú y la respuesta llega en streaming. Acepta texto e imágenes (con un modelo de visión); los PDF no.
 
 Más detalles de diseño en [PLAN.md](PLAN.md).

@@ -4,7 +4,7 @@ struct ChatMessage: Identifiable, Equatable {
     enum Role: String { case user, assistant }
     let id = UUID()
     let role: Role
-    let text: String
+    var text: String
     let attachment: Attachment?
 
     init(role: Role, text: String, attachment: Attachment? = nil) {
