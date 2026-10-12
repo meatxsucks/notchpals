@@ -6,6 +6,7 @@ final class ChatViewModel: ObservableObject {
 
     @Published var messages: [ChatMessage] = []
     @Published var input = ""
+    @Published var attachment: Attachment?
     @Published var isSending = false
     @Published var error: String?
     @Published var hasKey = KeychainStore.load() != nil
@@ -21,13 +22,29 @@ final class ChatViewModel: ObservableObject {
         hasKey = false
     }
 
+    func attach(url: URL) {
+        error = nil
+        Task {
+            do {
+                attachment = try await Task.detached { try Attachment.load(url: url) }.value
+            } catch {
+                self.error = error.localizedDescription
+            }
+        }
+    }
+
+    func removeAttachment() { attachment = nil }
+
     func send() {
-        let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        let typed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pending = attachment
+        let text = typed.isEmpty && pending != nil ? "Describe este archivo." : typed
         guard !text.isEmpty, !isSending else { return }
         guard let key = KeychainStore.load() else { error = ClaudeError.missingKey.errorDescription; return }
         input = ""
+        attachment = nil
         error = nil
-        messages.append(ChatMessage(role: .user, text: text))
+        messages.append(ChatMessage(role: .user, text: text, attachment: pending))
         isSending = true
         let history = messages
         Task {

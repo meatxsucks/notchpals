@@ -16,7 +16,7 @@ struct ChatTab: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(chat.messages) { message in
-                        Text(message.text)
+                        Text(message.attachment.map { "📎 \($0.name)\n" + message.text } ?? message.text)
                             .font(.callout)
                             .foregroundStyle(message.role == .user ? .gray : .white)
                             .textSelection(.enabled)
@@ -24,6 +24,20 @@ struct ChatTab: View {
                     if chat.isSending { ProgressView().controlSize(.small) }
                     if let error = chat.error { Text(error).font(.caption).foregroundStyle(.red) }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if let attachment = chat.attachment {
+                HStack(spacing: 4) {
+                    Image(systemName: "paperclip")
+                    Text(attachment.name).lineLimit(1).truncationMode(.middle)
+                    Button { chat.removeAttachment() } label: { Image(systemName: "xmark.circle.fill") }
+                        .buttonStyle(.plain)
+                }
+                .font(.caption)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(Color.white.opacity(0.15)))
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             HStack {

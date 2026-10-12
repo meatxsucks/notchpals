@@ -5,6 +5,13 @@ struct ChatMessage: Identifiable, Equatable {
     let id = UUID()
     let role: Role
     let text: String
+    let attachment: Attachment?
+
+    init(role: Role, text: String, attachment: Attachment? = nil) {
+        self.role = role
+        self.text = text
+        self.attachment = attachment
+    }
 }
 
 enum ClaudeError: LocalizedError {
@@ -43,10 +50,16 @@ struct ClaudeClient {
             "output_config": ["effort": "low"], // chat rápido en el notch
             "fallbacks": "default",
             "system": "Eres un asistente integrado en el notch de un Mac. Responde breve y directo.",
-            "messages": messages.map { ["role": $0.role.rawValue, "content": $0.text] },
+            "messages": messages.map { ["role": $0.role.rawValue, "content": content(for: $0)] as [String: Any] },
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         return request
+    }
+
+    /// String simple sin adjunto; array de bloques con adjunto.
+    static func content(for message: ChatMessage) -> Any {
+        guard let attachment = message.attachment else { return message.text }
+        return attachment.contentBlocks(prompt: message.text)
     }
 
     static func parseReply(_ data: Data) throws -> String {
