@@ -29,7 +29,7 @@ Desarrollado desde Linux: no se puede compilar ni probar aquí. Hay que abrir `P
 ## Módulo Claude
 - **Chat:** Messages API por HTTP (`claude-opus-5-5`, effort `low`). La API key vive en el llavero de macOS.
 - **Aprobaciones:** servidor local en `127.0.0.1:47600` (solo loopback, con token en `~/.notchpals/token`).
-  Un hook `PreToolUse` de Claude Code ejecuta `scripts/claude-approve-hook.sh`, que consulta al notch y devuelve
-  `allow`/`deny`. Sin respuesta en 60 s devuelve `ask` y Claude Code pregunta en la terminal.
+  Un hook `PermissionRequest` de Claude Code (solo se dispara cuando Claude Code va a preguntar) ejecuta `scripts/claude-approve-hook.sh`, que consulta al notch y devuelve
+  Permitir / Siempre / Rechazar. Sin respuesta en 100 s (o si la app está cerrada) no imprime nada y Claude Code pregunta en la terminal.
 - Configuración en `~/.claude/settings.json`:
-  `{"hooks":{"PreToolUse":[{"matcher":"Bash|Edit|Write","hooks":[{"type":"command","command":"/ruta/a/notchpals/scripts/claude-approve-hook.sh","timeout":75}]}]}}`
+  `{"hooks":{"PermissionRequest":[{"hooks":[{"type":"command","command":"/ruta/a/notchpals/scripts/claude-approve-hook.sh","timeout":120}]}]}}`

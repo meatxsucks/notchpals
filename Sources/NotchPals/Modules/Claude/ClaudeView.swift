@@ -69,6 +69,9 @@ struct ClaudeView: View {
                             }
                             Spacer()
                             Button("Rechazar") { approvals.resolve(item.id, decision: .deny) }.tint(.red)
+                            if item.request.suggestions != nil {
+                                Button("Siempre") { approvals.resolve(item.id, decision: .always) }.tint(.blue)
+                            }
                             Button("Permitir") { approvals.resolve(item.id, decision: .allow) }.tint(.green)
                         }
                     }

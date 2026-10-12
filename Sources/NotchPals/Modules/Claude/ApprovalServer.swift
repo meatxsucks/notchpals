@@ -7,11 +7,11 @@ import Network
 final class ApprovalServer: ObservableObject {
     static let shared = ApprovalServer()
     static let port: UInt16 = 47600
-    static let timeoutSeconds: UInt64 = 60
+    static let timeoutSeconds: UInt64 = 100 // el hook de Claude Code permite 120 s
 
     struct Pending: Identifiable {
         let request: ApprovalRequest
-        let respond: (ApprovalDecision, String) -> Void
+        let respond: (ApprovalDecision) -> Void
         var id: UUID { request.id }
     }
 
@@ -43,8 +43,7 @@ final class ApprovalServer: ObservableObject {
 
     func resolve(_ id: UUID, decision: ApprovalDecision) {
         guard let item = pending.first(where: { $0.id == id }) else { return }
-        let reason = decision == .allow ? "Aprobado desde NotchPals" : "Rechazado desde NotchPals"
-        item.respond(decision, reason)
+        item.respond(decision)
     }
 
     // MARK: - Red
@@ -78,22 +77,26 @@ final class ApprovalServer: ObservableObject {
         }
         var answered = false
         let id = request.id
-        let respond: (ApprovalDecision, String) -> Void = { [weak self] decision, reason in
+        let respond: (ApprovalDecision) -> Void = { [weak self] decision in
             guard !answered else { return }
             answered = true
             self?.pending.removeAll { $0.id == id }
-            self?.send(connection, status: 200, body: ApprovalProtocol.responseJSON(decision, reason: reason))
+            if let body = ApprovalProtocol.responseJSON(decision, request: request) {
+                self?.send(connection, status: 200, body: body)
+            } else {
+                self?.send(connection, status: 204, body: Data()) // sin salida → diálogo normal
+            }
         }
         pending.append(Pending(request: request, respond: respond))
         // Sin respuesta a tiempo: se devuelve "ask" y Claude Code pregunta en la terminal.
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: Self.timeoutSeconds * 1_000_000_000)
-            respond(.ask, "Sin respuesta en NotchPals")
+            respond(.ask)
         }
     }
 
     private func send(_ connection: NWConnection, status: Int, body: Data) {
-        let head = "HTTP/1.1 \(status) \(status == 200 ? "OK" : "Error")\r\n"
+        let head = "HTTP/1.1 \(status) \(status == 200 ? "OK" : (status == 204 ? "No Content" : "Error"))\r\n"
             + "Content-Type: application/json\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n"
         connection.send(content: Data(head.utf8) + body, completion: .contentProcessed { _ in connection.cancel() })
     }

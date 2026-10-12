@@ -5,19 +5,27 @@ struct ApprovalRequest: Identifiable, Equatable {
     let tool: String
     let summary: String
     let cwd: String?
+    /// `permission_suggestions` de Claude Code (JSON ya serializado); permite el botón «Siempre».
+    var suggestions: Data? = nil
 }
 
 enum ApprovalDecision: String {
-    case allow, deny, ask
+    case allow, always, deny, ask
 }
 
-/// Formato de los hooks PreToolUse de Claude Code (entrada JSON por stdin, salida JSON por stdout).
+/// Formato del hook `PermissionRequest` de Claude Code (entrada JSON por stdin, salida JSON por stdout).
+/// Solo se dispara cuando Claude Code realmente va a pedir permiso.
 enum ApprovalProtocol {
     static func parse(_ data: Data) -> ApprovalRequest? {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let tool = json["tool_name"] as? String else { return nil }
         let input = json["tool_input"] as? [String: Any] ?? [:]
-        return ApprovalRequest(tool: tool, summary: summarize(tool: tool, input: input), cwd: json["cwd"] as? String)
+        var suggestions: Data?
+        if let list = json["permission_suggestions"] as? [Any], !list.isEmpty {
+            suggestions = try? JSONSerialization.data(withJSONObject: list)
+        }
+        return ApprovalRequest(tool: tool, summary: summarize(tool: tool, input: input),
+                               cwd: json["cwd"] as? String, suggestions: suggestions)
     }
 
     static func summarize(tool: String, input: [String: Any]) -> String {
@@ -35,15 +43,27 @@ enum ApprovalProtocol {
         return text.count > 200 ? String(text.prefix(200)) + "…" : text
     }
 
-    static func responseJSON(_ decision: ApprovalDecision, reason: String) -> Data {
+    /// JSON que imprime el hook. `nil` = sin salida: Claude Code muestra su diálogo normal.
+    static func responseJSON(_ decision: ApprovalDecision, request: ApprovalRequest) -> Data? {
+        var inner: [String: Any]
+        switch decision {
+        case .ask:
+            return nil
+        case .allow:
+            inner = ["behavior": "allow"]
+        case .always:
+            inner = ["behavior": "allow"]
+            if let data = request.suggestions,
+               let list = try? JSONSerialization.jsonObject(with: data) as? [Any] {
+                inner["updatedPermissions"] = list
+            }
+        case .deny:
+            inner = ["behavior": "deny", "message": "Rechazado desde NotchPals"]
+        }
         let payload: [String: Any] = [
-            "hookSpecificOutput": [
-                "hookEventName": "PreToolUse",
-                "permissionDecision": decision.rawValue,
-                "permissionDecisionReason": reason,
-            ]
+            "hookSpecificOutput": ["hookEventName": "PermissionRequest", "decision": inner]
         ]
-        return (try? JSONSerialization.data(withJSONObject: payload)) ?? Data("{}".utf8)
+        return try? JSONSerialization.data(withJSONObject: payload)
     }
 }
 

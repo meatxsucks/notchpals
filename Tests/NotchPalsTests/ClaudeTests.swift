@@ -14,12 +14,23 @@ final class ClaudeTests: XCTestCase {
         XCTAssertNil(ApprovalProtocol.parse(Data("no es json".utf8)))
     }
 
-    func testResponseJSON() throws {
-        let data = ApprovalProtocol.responseJSON(.deny, reason: "no")
-        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        let output = json?["hookSpecificOutput"] as? [String: Any]
-        XCTAssertEqual(output?["permissionDecision"] as? String, "deny")
-        XCTAssertEqual(output?["hookEventName"] as? String, "PreToolUse")
+    func testPermissionRequestResponses() throws {
+        let json = #"{"tool_name":"Bash","tool_input":{"command":"ls"},"permission_suggestions":[{"type":"addRules"}]}"#
+        let request = try XCTUnwrap(ApprovalProtocol.parse(Data(json.utf8)))
+        XCTAssertNotNil(request.suggestions)
+
+        func decision(_ d: ApprovalDecision) throws -> [String: Any]? {
+            guard let data = ApprovalProtocol.responseJSON(d, request: request) else { return nil }
+            let root = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            let output = root?["hookSpecificOutput"] as? [String: Any]
+            XCTAssertEqual(output?["hookEventName"] as? String, "PermissionRequest")
+            return output?["decision"] as? [String: Any]
+        }
+        XCTAssertEqual(try decision(.allow)?["behavior"] as? String, "allow")
+        XCTAssertNil(try decision(.allow)?["updatedPermissions"])
+        XCTAssertNotNil(try decision(.always)?["updatedPermissions"])
+        XCTAssertEqual(try decision(.deny)?["behavior"] as? String, "deny")
+        XCTAssertNil(ApprovalProtocol.responseJSON(.ask, request: request))
     }
 
     func testHTTPParserWaitsForBody() {
