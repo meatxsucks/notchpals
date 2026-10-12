@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Network
 
@@ -15,8 +16,23 @@ final class ApprovalServer: ObservableObject {
         var id: UUID { request.id }
     }
 
+    static let soundDefaultsKey = "notchpals.approvalSound"
+
+    /// Cola FIFO (máx. 5); la solicitud 6.ª se resuelve de inmediato como `.ask`.
+    private var queue = ApprovalQueue()
+    private var responders: [UUID: (ApprovalDecision) -> Void] = [:]
     @Published private(set) var pending: [Pending] = []
     @Published private(set) var isRunning = false
+
+    private func refreshPending() {
+        pending = queue.entries.compactMap { entry in
+            responders[entry.id].map { Pending(request: entry.request, respond: $0) }
+        }
+    }
+
+    init() {
+        UserDefaults.standard.register(defaults: [Self.soundDefaultsKey: true])
+    }
 
     private var listener: NWListener?
     private let token = ApprovalServer.loadOrCreateToken()
@@ -42,8 +58,7 @@ final class ApprovalServer: ObservableObject {
     }
 
     func resolve(_ id: UUID, decision: ApprovalDecision) {
-        guard let item = pending.first(where: { $0.id == id }) else { return }
-        item.respond(decision)
+        responders[id]?(decision)
     }
 
     // MARK: - Red
@@ -84,18 +99,52 @@ final class ApprovalServer: ObservableObject {
         let respond: (ApprovalDecision) -> Void = { [weak self] decision in
             guard !answered else { return }
             answered = true
-            self?.pending.removeAll { $0.id == id }
+            self?.queue.resolve(id)
+            self?.responders[id] = nil
+            self?.refreshPending()
             if let body = ApprovalProtocol.responseJSON(decision, request: request) {
                 self?.send(connection, status: 200, body: body)
             } else {
                 self?.send(connection, status: 204, body: Data()) // sin salida → diálogo normal
             }
         }
-        pending.append(Pending(request: request, respond: respond))
+        switch queue.enqueue(request) {
+        case .overflow(let decision):
+            // Cola llena: Claude Code pregunta en la terminal.
+            respond(decision)
+            return
+        case .queued:
+            responders[request.id] = respond
+            refreshPending()
+        }
+        playSoundIfEnabled()
+        // Si el hook cuelga (conexión caída), la solicitud ya no tiene a quién responder.
+        connection.stateUpdateHandler = { [weak self] state in
+            switch state {
+            case .failed, .cancelled:
+                Task { @MainActor in self?.drop(id) }
+            default:
+                break
+            }
+        }
         // Sin respuesta a tiempo: se devuelve "ask" y Claude Code pregunta en la terminal.
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: Self.timeoutSeconds * 1_000_000_000)
             respond(.ask)
+        }
+    }
+
+    /// Quita una solicitud pendiente sin responder (la conexión ya no existe).
+    private func drop(_ id: UUID) {
+        guard responders[id] != nil else { return }
+        queue.resolve(id)
+        responders[id] = nil
+        refreshPending()
+    }
+
+    private func playSoundIfEnabled() {
+        if UserDefaults.standard.bool(forKey: Self.soundDefaultsKey) {
+            NSSound(named: "Ping")?.play()
         }
     }
 
